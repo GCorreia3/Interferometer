@@ -1,5 +1,6 @@
 import pygame
 import sys
+import math
 from time import perf_counter
 
 WIDTH = 800
@@ -7,10 +8,6 @@ HEIGHT = 800
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 
 pygame.init()
-
-running = True
-
-
 
 def dist_to(pos1, pos2):
     return ((pos2[0] - pos1[0])**2 + (pos2[1] - pos1[1])**2)**0.5
@@ -59,26 +56,42 @@ class Mirror(RotatedRectangle):
         self.min_pos = min_pos
         self.max_pos = max_pos
 
+        self.time_distorting = 0
+
         if self.drag_axis == 0:
             self.path_distance = self.pos[0] - WIDTH/2
         else:
             self.path_distance = HEIGHT/2 - self.pos[1]
 
-    def update(self, mouse):
-        if self.drag:
+    def update(self, delta_time, mouse, distorting):
+        if distorting:
             if self.drag_axis == 0:
-                self.pos = (min(self.max_pos, max(self.min_pos, mouse[0] + self.drag_offset[0])), self.pos[1])
+                self.pos = (self.pos[0] + math.cos(self.time_distorting) * delta_time * 50, self.pos[1])
                 self.path_distance = self.pos[0] - WIDTH/2
+
             else:
-                self.pos = (self.pos[0], min(self.max_pos, max(self.min_pos, mouse[1] + self.drag_offset[1])))
+                self.pos = (self.pos[0], self.pos[1] + math.cos(self.time_distorting) * delta_time * 50)
                 self.path_distance = HEIGHT/2 - self.pos[1]
 
             self.rect.center = self.pos
+            self.time_distorting += delta_time
+        else:
+            self.time_distorting = 0
+            if mouse:
+                if self.drag:
+                    if self.drag_axis == 0:
+                        self.pos = (min(self.max_pos, max(self.min_pos, mouse[0] + self.drag_offset[0])), self.pos[1])
+                        self.path_distance = self.pos[0] - WIDTH/2
+                    else:
+                        self.pos = (self.pos[0], min(self.max_pos, max(self.min_pos, mouse[1] + self.drag_offset[1])))
+                        self.path_distance = HEIGHT/2 - self.pos[1]
+
+                    self.rect.center = self.pos
 
 
 
 class Interferometer():
-    def __init__(self) -> None:
+    def __init__(self, wavelength) -> None:
 
         self.split_mirror = RotatedRectangle((WIDTH/2, HEIGHT/2), 50, 10, 45, (100, 200, 255))
 
@@ -87,7 +100,7 @@ class Interferometer():
 
         self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
 
-        self.wavelength = 100
+        self.wavelength = wavelength
 
         self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2
 
@@ -103,9 +116,9 @@ class Interferometer():
         self.top_mirror.drag = False
         self.right_mirror.drag = False
 
-    def update(self, mouse):
-        self.top_mirror.update(mouse)
-        self.right_mirror.update(mouse)
+    def update(self, delta_time, mouse, distorting):
+        self.top_mirror.update(delta_time, mouse, distorting)
+        self.right_mirror.update(delta_time, mouse, distorting)
 
         self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
 
@@ -137,7 +150,10 @@ class Interferometer():
 
 
 
-interferometer = Interferometer()
+running = True
+distorting = False
+
+interferometer = Interferometer(wavelength=100)
 
 def quit():
     # closes pygame and quits the application
@@ -154,11 +170,15 @@ while running:
 
     interferometer.draw()
 
+    mouse = None
+
     # Looping through events
     for event in pygame.event.get():
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 quit()
+            if event.key == pygame.K_SPACE:
+                distorting = not distorting
 
         elif event.type == pygame.QUIT:
             quit()
@@ -169,10 +189,11 @@ while running:
 
         elif event.type == pygame.MOUSEMOTION:
             mouse = pygame.mouse.get_pos()
-            interferometer.update(mouse)
 
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             interferometer.stop_drag()
+
+    interferometer.update(delta_time, mouse, distorting)
 
     pygame.display.update()
 
