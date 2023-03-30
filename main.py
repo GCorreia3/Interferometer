@@ -54,19 +54,26 @@ class Mirror(RotatedRectangle):
 
         self.drag = False
         self.drag_axis = drag_axis # 0 for x-axis, 1 for y-axis
+        self.drag_offset = (0, 0)
 
         self.min_pos = min_pos
         self.max_pos = max_pos
 
+        if self.drag_axis == 0:
+            self.path_distance = self.pos[0] - WIDTH/2
+        else:
+            self.path_distance = HEIGHT/2 - self.pos[1]
+
     def update(self, mouse):
         if self.drag:
             if self.drag_axis == 0:
-                self.pos = (min(self.max_pos, max(self.min_pos, mouse[0])), self.pos[1])
+                self.pos = (min(self.max_pos, max(self.min_pos, mouse[0] + self.drag_offset[0])), self.pos[1])
+                self.path_distance = self.pos[0] - WIDTH/2
             else:
-                self.pos = (self.pos[0], min(self.max_pos, max(self.min_pos, mouse[1])))
+                self.pos = (self.pos[0], min(self.max_pos, max(self.min_pos, mouse[1] + self.drag_offset[1])))
+                self.path_distance = HEIGHT/2 - self.pos[1]
 
             self.rect.center = self.pos
-
 
 
 
@@ -78,11 +85,19 @@ class Interferometer():
         self.top_mirror = Mirror((WIDTH/2, HEIGHT/8), 50, 10, 0, (100, 200, 255), 1, 5, HEIGHT/2-25)
         self.right_mirror = Mirror((7*WIDTH/8, HEIGHT/2), 50, 10, 90, (100, 200, 255), 0, WIDTH/2+25, WIDTH-5)
 
+        self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
+
+        self.wavelength = 100
+
+        self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2
+
     def check_drag(self, mouse):
         if dist_to(self.top_mirror.pos, mouse) < self.top_mirror.width:
             self.top_mirror.drag = True
+            self.top_mirror.drag_offset = (self.top_mirror.pos[0] - mouse[0], self.top_mirror.pos[1] - mouse[1])
         elif dist_to(self.right_mirror.pos, mouse) < self.right_mirror.width:
             self.right_mirror.drag = True
+            self.right_mirror.drag_offset = (self.right_mirror.pos[0] - mouse[0], self.right_mirror.pos[1] - mouse[1])
 
     def stop_drag(self):
         self.top_mirror.drag = False
@@ -91,6 +106,10 @@ class Interferometer():
     def update(self, mouse):
         self.top_mirror.update(mouse)
         self.right_mirror.update(mouse)
+
+        self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
+
+        self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2
     
     def draw(self):
         # Draw Laser Emitter
@@ -107,7 +126,7 @@ class Interferometer():
         pygame.draw.rect(WIN, (255/2, 0, 0), (WIDTH/2-5, self.top_mirror.pos[1], 10, HEIGHT/2-self.top_mirror.pos[1]))
 
         # Draw Resultant Laser
-        pygame.draw.rect(WIN, (255, 0, 0), (WIDTH/2-5, HEIGHT/2, 10, HEIGHT/4-25/2))
+        pygame.draw.rect(WIN, (255 * self.phase_difference, 0, 0), (WIDTH/2-5, HEIGHT/2, 10, HEIGHT/4-25/2))
 
         # Draw Two Mirrors
         self.top_mirror.draw()
@@ -117,8 +136,8 @@ class Interferometer():
         self.split_mirror.draw()
 
 
-interferometer = Interferometer()
 
+interferometer = Interferometer()
 
 def quit():
     # closes pygame and quits the application
