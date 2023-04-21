@@ -142,6 +142,13 @@ class Laser():
 
         self.direction = direction
 
+    def update_length(self, mirror_position):
+        self.length = dist_to((self.x, self.y), mirror_position)
+
+    def update_amplitude(self, phase_difference):
+        self.amplitude = phase_difference
+        self.colour = wavelength_to_colour(self.wavelength, self.amplitude)
+
     def draw(self):
         if self.direction == UP:
             pygame.draw.rect(WIN, self.colour, (self.x - self.width/2, self.y - self.length, self.width, self.length))
@@ -162,13 +169,15 @@ class Interferometer():
         self.top_mirror = Mirror((WIDTH/2, HEIGHT/8), 50, 10, 0, (100, 200, 255), 1, 5, HEIGHT/2-25)
         self.right_mirror = Mirror((7*WIDTH/8, HEIGHT/2), 50, 10, 90, (100, 200, 255), 0, WIDTH/2+25, WIDTH-5)
 
-        self.laser_emitted = Laser((WIDTH/4-25 + 50, HEIGHT/2-25/2 + 12.5), 10, 400, 0.5, 700, RIGHT)
+        self.wavelength = wavelength
+
+        self.laser_emitted = Laser((WIDTH/4-25 + 50, HEIGHT/2-25/2 + 12.5), 10, dist_to((WIDTH/4-25 + 50, HEIGHT/2-25/2 + 12.5), self.right_mirror.pos), 0.5, self.wavelength, RIGHT)
+        self.split_laser = Laser((WIDTH/2, HEIGHT/2), 10, dist_to((WIDTH/2, HEIGHT/2), self.top_mirror.pos), 0.5, self.wavelength, UP)
+        self.resultant_laser = Laser((WIDTH/2, HEIGHT/2), 10, dist_to((WIDTH/2, HEIGHT/2), (WIDTH/2-25/2, 3*HEIGHT/4-25/2)), 0.5, self.wavelength, DOWN)
 
         self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
 
-        self.wavelength = wavelength
-
-        self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2
+        self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2 # 1 if in phase, 0 if not
 
     def check_drag(self, mouse):
         if dist_to(self.top_mirror.pos, mouse) < self.top_mirror.width:
@@ -189,6 +198,10 @@ class Interferometer():
         self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
 
         self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2
+
+        self.laser_emitted.update_length(self.right_mirror.pos)
+        self.split_laser.update_length(self.top_mirror.pos)
+        self.resultant_laser.update_amplitude(self.phase_difference)
     
     def draw(self):
         # Draw Laser Emitter
@@ -197,17 +210,10 @@ class Interferometer():
         # Draw Detector
         pygame.draw.rect(WIN, (255, 255, 255), (WIDTH/2-25/2, 3*HEIGHT/4-25/2, 25, 25))
 
-        # Draw First Laser
-        #pygame.draw.rect(WIN, (255, 0, 0), (WIDTH/4+25, HEIGHT/2-5, WIDTH/4-25, 10))
-
-        # Draw Both Split Lasers
-        #pygame.draw.rect(WIN, (255/2, 0, 0), (WIDTH/2, HEIGHT/2-5, self.right_mirror.pos[0]-WIDTH/2, 10))
-        #pygame.draw.rect(WIN, (255/2, 0, 0), (WIDTH/2-5, self.top_mirror.pos[1], 10, HEIGHT/2-self.top_mirror.pos[1]))
-
-        # Draw Resultant Laser
-        pygame.draw.rect(WIN, (255 * self.phase_difference, 0, 0), (WIDTH/2-5, HEIGHT/2, 10, HEIGHT/4-25/2))
-
+        # Draw lasers
         self.laser_emitted.draw()
+        self.split_laser.draw()
+        self.resultant_laser.draw()
 
         # Draw Two Mirrors
         self.top_mirror.draw()
@@ -221,7 +227,7 @@ class Interferometer():
 running = True
 distorting = False
 
-interferometer = Interferometer(wavelength=100)
+interferometer = Interferometer(wavelength=700)
 
 def quit():
     # closes pygame and quits the application
