@@ -21,7 +21,7 @@ def dist_to(pos1, pos2):
 
 def wavelength_to_colour(wavelength, amplitude):
     if wavelength >= 380 and wavelength <= 460:
-        R = (460 - wavelength) / (460 - 350)
+        R = (460 - wavelength) / (460 - 380)
         G = 0
         B = 1
     elif wavelength >= 460 and wavelength <= 510:
