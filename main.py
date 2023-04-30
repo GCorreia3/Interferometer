@@ -9,11 +9,6 @@ WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 
 pygame.init()
 
-UP = 0
-RIGHT = 1
-DOWN = 2
-LEFT = 3
-
 font = pygame.font.SysFont("calibri", 20)
 
 def dist_to(pos1, pos2):
