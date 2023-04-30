@@ -189,6 +189,10 @@ class Graph():
         if len(self.points) > 1:
             for i in range(len(self.points) - 1):
                 pygame.draw.line(WIN, (100, 100, 255), self.point_to_position(self.points[i]), self.point_to_position(self.points[i+1]), 2)
+
+            # Draws info on last point
+            info_text = font.render(f"{round(self.points[len(self.points)-1][1], 2)}", True, (255, 255, 255))
+            WIN.blit(info_text, (self.point_to_position(self.points[len(self.points)-1])[0] + info_text.get_width()/2, self.point_to_position(self.points[len(self.points)-1])[1] - info_text.get_height()/2))
         
         #for point in self.points:
             #pygame.draw.circle(WIN, (255, 255, 255), self.point_to_position(point), 5)
@@ -216,39 +220,39 @@ class Mirror(RotatedRectangle):
         else:
             self.path_distance = HEIGHT/2 - self.pos[1]
 
+    def update_pos(self, pos):
+        self.pos = pos
+        self.rect.center = pos
+
     def update(self, delta_time, mouse, distorting):
         if distorting:
             if self.drag_axis == 0:
-                self.pos = (self.pos[0] + math.cos(self.time_distorting) * delta_time * 50, self.pos[1])
+                self.update_pos((self.pos[0] + math.cos(self.time_distorting) * delta_time * 50, self.pos[1]))
                 self.path_distance = self.pos[0] - WIDTH/2
 
             else:
-                self.pos = (self.pos[0], self.pos[1] + math.cos(self.time_distorting) * delta_time * 50)
+                self.update_pos((self.pos[0], self.pos[1] + math.cos(self.time_distorting) * delta_time * 50))
                 self.path_distance = HEIGHT/2 - self.pos[1]
 
-            self.rect.center = self.pos
             self.time_distorting += delta_time
         else:
             self.time_distorting = 0
-            if mouse:
-                if self.drag:
-                    if self.drag_axis == 0:
-                        self.pos = (min(self.max_pos, max(self.min_pos, mouse[0] + self.drag_offset[0])), self.pos[1])
-                        self.path_distance = self.pos[0] - WIDTH/2
-                    else:
-                        self.pos = (self.pos[0], min(self.max_pos, max(self.min_pos, mouse[1] + self.drag_offset[1])))
-                        self.path_distance = HEIGHT/2 - self.pos[1]
-
-                    self.rect.center = self.pos
+            if mouse and self.drag:
+                if self.drag_axis == 0:
+                    self.update_pos((min(self.max_pos, max(self.min_pos, mouse[0] + self.drag_offset[0])), self.pos[1]))
+                    self.path_distance = self.pos[0] - WIDTH/2
+                else:
+                    self.update_pos((self.pos[0], min(self.max_pos, max(self.min_pos, mouse[1] + self.drag_offset[1]))))
+                    self.path_distance = HEIGHT/2 - self.pos[1]
 
 
 
 class Laser():
-    def __init__(self, pos, width, length, amplitude, wavelength, direction) -> None:
+    def __init__(self, start_pos, end_pos, width, amplitude, wavelength) -> None:
 
-        self.x, self.y = pos
+        self.start_x, self.start_y = start_pos
+        self.end_x, self.end_y = end_pos
         self.width = width
-        self.length = length
 
         self.amplitude = amplitude
 
@@ -258,24 +262,12 @@ class Laser():
 
         self.colour = wavelength_to_colour(self.wavelength, self.amplitude)
 
-        self.direction = direction
-
-    def update_length(self, mirror_position):
-        self.length = dist_to((self.x, self.y), mirror_position)
-
     def update_amplitude(self, phase_difference):
         self.amplitude = phase_difference
         self.colour = wavelength_to_colour(self.wavelength, self.amplitude)
 
     def draw(self):
-        if self.direction == UP:
-            pygame.draw.rect(WIN, self.colour, (self.x - self.width/2, self.y - self.length, self.width, self.length))
-        elif self.direction == RIGHT:
-            pygame.draw.rect(WIN, self.colour, (self.x, self.y - self.width/2, self.length, self.width))
-        elif self.direction == DOWN:
-            pygame.draw.rect(WIN, self.colour, (self.x - self.width/2, self.y, self.width, self.length))
-        elif self.direction == LEFT:
-            pygame.draw.rect(WIN, self.colour, (self.x - self.length, self.y - self.width/2, self.length, self.width))
+        pygame.draw.line(WIN, self.colour, (self.start_x, self.start_y), (self.end_x, self.end_y), self.width)
 
 
 
@@ -290,9 +282,9 @@ class Interferometer():
         self.wavelength = wavelength
         self.amplitude = amplitude
 
-        self.laser_emitted = Laser((WIDTH/4-25 + 50, HEIGHT/2-25/2 + 12.5), 10, dist_to((WIDTH/4-25 + 50, HEIGHT/2-25/2 + 12.5), self.right_mirror.pos), self.amplitude, self.wavelength, RIGHT)
-        self.split_laser = Laser((WIDTH/2, HEIGHT/2), 10, dist_to((WIDTH/2, HEIGHT/2), self.top_mirror.pos), self.amplitude, self.wavelength, UP)
-        self.resultant_laser = Laser((WIDTH/2, HEIGHT/2), 10, dist_to((WIDTH/2, HEIGHT/2), (WIDTH/2-25/2, 2.5*HEIGHT/4-25/2)), self.amplitude, self.wavelength, DOWN)
+        self.laser_emitted = Laser((WIDTH/4+25, HEIGHT/2), self.right_mirror.pos, 10, self.amplitude, self.wavelength)
+        self.split_laser = Laser((WIDTH/2, HEIGHT/2), self.top_mirror.pos, 10, self.amplitude, self.wavelength)
+        self.resultant_laser = Laser((WIDTH/2, HEIGHT/2), (WIDTH/2, 2.5*HEIGHT/4-25/2), 10, self.amplitude, self.wavelength)
 
         self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
 
@@ -310,6 +302,10 @@ class Interferometer():
         self.top_mirror.drag = False
         self.right_mirror.drag = False
 
+    def reset_mirrors(self):
+        self.top_mirror.update_pos((WIDTH/2, HEIGHT/8))
+        self.right_mirror.update_pos((7*WIDTH/8, HEIGHT/2))
+
     def update(self, delta_time, mouse, distorting):
         self.top_mirror.update(delta_time, mouse, distorting)
         self.right_mirror.update(delta_time, mouse, distorting)
@@ -318,15 +314,15 @@ class Interferometer():
 
         self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2
 
-        self.laser_emitted.update_length(self.right_mirror.pos)
-        self.split_laser.update_length(self.top_mirror.pos)
+        self.laser_emitted.end_x, self.laser_emitted.end_y = self.right_mirror.pos
+        self.split_laser.end_x, self.split_laser.end_y = self.top_mirror.pos
         self.resultant_laser.update_amplitude(self.phase_difference * self.amplitude * 2)
     
     def draw(self):
         # Draw lasers
+        self.resultant_laser.draw()
         self.laser_emitted.draw()
         self.split_laser.draw()
-        self.resultant_laser.draw()
 
         # Draw Two Mirrors
         self.top_mirror.draw()
@@ -347,14 +343,39 @@ running = True
 distorting = False
 
 interferometer = Interferometer(wavelength=700, amplitude=0.5)
-graph = Graph((WIDTH/2, HEIGHT-125), WIDTH*3.5/4, 250, (10, 10, 15), x_start=0, x_end=10, y_start=0, y_end=1)
+graph = Graph((WIDTH/2, HEIGHT-125), WIDTH*3.5/4, 250, (10, 10, 15), x_start=0, x_end=30, y_start=0, y_end=1)
 
 def quit():
     # closes pygame and quits the application
     pygame.quit()
     sys.exit(0)
 
-delta_time = 0
+
+
+average_fps_elapsed_time = 0
+average_fps = 0
+n_fps = 1
+showing_average_fps = 0
+def get_average_fps(delta_time):
+
+    global average_fps_elapsed_time, average_fps, n_fps, showing_average_fps
+    average_fps_elapsed_time += delta_time
+    if average_fps_elapsed_time > 0.2:
+
+        average_fps_elapsed_time = 0
+        showing_average_fps = average_fps
+        average_fps = 1 / delta_time
+        n_fps = 1
+
+    else:
+        average_fps = (1 / delta_time + n_fps * average_fps) / (n_fps + 1)
+        n_fps += 1
+
+    return showing_average_fps
+
+
+
+delta_time = 1
 
 graph_timer = 0
 graph_time = 0.1
@@ -370,6 +391,10 @@ while running:
     interferometer.draw()
     graph.draw()
 
+    # Fps text
+    fps_text = font.render(f"FPS: {round(get_average_fps(delta_time))}", True, (255, 255, 255))
+    WIN.blit(fps_text, (0, 0))
+
     mouse = None
 
     # Looping through events
@@ -377,10 +402,34 @@ while running:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 quit()
+
             if event.key == pygame.K_SPACE:
                 distorting = not distorting
+
             if event.key == pygame.K_g:
                 graphing = not graphing
+
+            if event.key == pygame.K_r:
+                # Resets everything
+                graph.points.clear()
+
+                if graphing:
+                    graphing = False
+                
+                if distorting:
+                    distorting = False
+
+                interferometer.reset_mirrors()
+
+                graph_total_time = 0
+
+            if event.key == pygame.K_s:
+                # Save data to file
+                data = open("data.txt", "w")
+                for point in graph.points:
+                    data.write(f"Time: {round(point[0], 6)}         Intensity: {round(point[1], 6)}\n")
+                data.close()
+
 
         elif event.type == pygame.QUIT:
             quit()
@@ -406,7 +455,7 @@ while running:
             graph.add_point((graph_total_time, interferometer.phase_difference * interferometer.amplitude * 2))
             graph_timer = 0
 
-        graph.x_end = max(10, graph_total_time)
+        graph.x_end = max(30, graph_total_time)
         graph.x_range = graph.x_end - graph.x_start
     else:
         graph.is_graphing_colour = (255, 0, 0)
