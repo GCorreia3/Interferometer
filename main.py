@@ -115,6 +115,10 @@ class Graph():
 
         self.is_graphing_colour = (255, 0, 0)
 
+        self.graph_timer = 0
+        self.graph_time = 0.1
+        self.graph_total_time = 0
+
     def point_to_position(self, point):
 
         x_proportion = point[0] / self.x_range
@@ -152,6 +156,21 @@ class Graph():
         axis_y_title = pygame.transform.rotate(axis_y_title, 90)
         WIN.blit(axis_y_title, (self.start_y_coords[0] - axis_y_title.get_width()/2 - self.text_offset - 5, self.pos[1] - axis_y_title.get_height()/2))
 
+    def update(self, delta_time, graphing, phase_difference, amplitude):
+        if graphing:
+            self.is_graphing_colour = (0, 255, 0)
+            if self.graph_timer < self.graph_time:
+                self.graph_timer += delta_time
+                self.graph_total_time += delta_time
+            else:
+                self.add_point((self.graph_total_time, phase_difference * amplitude * 2))
+                self.graph_timer = 0
+
+            self.x_end = max(30, self.graph_total_time)
+            self.x_range = self.x_end - self.x_start
+        else:
+            self.is_graphing_colour = (255, 0, 0)
+
     def draw(self):
         # Draws background
         pygame.draw.rect(WIN, self.colour, (self.pos[0] - self.width/2, self.pos[1] - self.height/2, self.width, self.height))
@@ -178,10 +197,15 @@ class Graph():
         
         # Draw is graphing circle
         pygame.draw.circle(WIN, self.is_graphing_colour, (self.pos[0] + self.width/2 - 7, self.pos[1] - self.height/2 + 7), 7)
-
+        
 
         # Draws points
         if len(self.points) > 1:
+
+            # Remove close points to improve performance
+            if dist_to(self.point_to_position(self.points[len(self.points)-1]), self.point_to_position(self.points[len(self.points)-2])) < 1:
+                self.points.remove(self.points[len(self.points)-1])
+
             for i in range(len(self.points) - 1):
                 pygame.draw.line(WIN, (100, 100, 255), self.point_to_position(self.points[i]), self.point_to_position(self.points[i+1]), 2)
 
@@ -223,11 +247,9 @@ class Mirror(RotatedRectangle):
         if distorting:
             if self.drag_axis == 0:
                 self.update_pos((self.pos[0] + math.cos(self.time_distorting) * delta_time * 50, self.pos[1]))
-                self.path_distance = self.pos[0] - WIDTH/2
 
             else:
                 self.update_pos((self.pos[0], self.pos[1] + math.cos(self.time_distorting) * delta_time * 50))
-                self.path_distance = HEIGHT/2 - self.pos[1]
 
             self.time_distorting += delta_time
         else:
@@ -235,10 +257,13 @@ class Mirror(RotatedRectangle):
             if mouse and self.drag:
                 if self.drag_axis == 0:
                     self.update_pos((min(self.max_pos, max(self.min_pos, mouse[0] + self.drag_offset[0])), self.pos[1]))
-                    self.path_distance = self.pos[0] - WIDTH/2
                 else:
                     self.update_pos((self.pos[0], min(self.max_pos, max(self.min_pos, mouse[1] + self.drag_offset[1]))))
-                    self.path_distance = HEIGHT/2 - self.pos[1]
+            
+        if self.drag_axis == 0:
+            self.path_distance = self.pos[0] - WIDTH/2
+        else:
+            self.path_distance = HEIGHT/2 - self.pos[1]
 
 
 
@@ -372,9 +397,6 @@ def get_average_fps(delta_time):
 
 delta_time = 1
 
-graph_timer = 0
-graph_time = 0.1
-graph_total_time = 0
 graphing = False
 
 # Main loop
@@ -416,7 +438,7 @@ while running:
 
                 interferometer.reset_mirrors()
 
-                graph_total_time = 0
+                graph.graph_total_time = 0
 
             if event.key == pygame.K_s:
                 # Save data to file
@@ -441,19 +463,7 @@ while running:
 
     interferometer.update(delta_time, mouse, distorting)
 
-    if graphing:
-        graph.is_graphing_colour = (0, 255, 0)
-        if graph_timer < graph_time:
-            graph_timer += delta_time
-            graph_total_time += delta_time
-        else:
-            graph.add_point((graph_total_time, interferometer.phase_difference * interferometer.amplitude * 2))
-            graph_timer = 0
-
-        graph.x_end = max(30, graph_total_time)
-        graph.x_range = graph.x_end - graph.x_start
-    else:
-        graph.is_graphing_colour = (255, 0, 0)
+    graph.update(delta_time, graphing, interferometer.phase_difference, interferometer.amplitude)
 
     pygame.display.update()
 
