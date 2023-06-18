@@ -17,6 +17,8 @@ def dist_to(pos1, pos2):
 
 
 def wavelength_to_colour(wavelength, amplitude):
+    if realistic:
+        amplitude = 1
     if wavelength >= 380 and wavelength <= 460:
         R = (460 - wavelength) / (460 - 380)
         G = 0
@@ -74,6 +76,40 @@ class RotatedRectangle():
             WIN.blit(new_image, rect)
         else:
             WIN.blit(self.original_image, self.rect)
+
+
+
+class Toggle():
+    def __init__(self, pos, width, height, text, box_colour, condition: bool) -> None:
+        self.pos = pos
+        self.width = width
+        self.height = height
+
+        self.text = text
+
+        self.box_colour = box_colour
+
+        self.condition = condition
+
+        self.toggle_offset = 5
+
+    def check_click(self, mouse):
+        if abs(mouse[0] - self.pos[0]) <= self.width/2 and abs(mouse[1] - self.pos[1]) <= self.height/2:
+            self.condition = not self.condition
+        
+        return self.condition
+
+    def draw(self):
+        # Draw background rectangle
+        pygame.draw.rect(WIN, self.box_colour, (self.pos[0] - self.width/2, self.pos[1] - self.height/2, self.width, self.height), 2)
+
+        # Draw toggle
+        if self.condition:
+            pygame.draw.rect(WIN, (0, 255, 0), (self.pos[0] - self.width/2 + self.toggle_offset, self.pos[1] - self.height/2 + self.toggle_offset, self.width - 2*self.toggle_offset, self.height - 2*self.toggle_offset))
+
+        # Draw toggle text
+        text_surface = font.render(self.text, True, (255, 255, 255))
+        WIN.blit(text_surface, (self.pos[0] + self.width, self.pos[1] - text_surface.get_height()/2))
 
 
 
@@ -282,12 +318,27 @@ class Laser():
 
         self.colour = wavelength_to_colour(self.wavelength, self.amplitude)
 
+        self.laser_points = []
+
     def update_amplitude(self, phase_difference):
         self.amplitude = phase_difference
         self.colour = wavelength_to_colour(self.wavelength, self.amplitude)
 
     def draw(self):
-        pygame.draw.line(WIN, self.colour, (self.start_x, self.start_y), (self.end_x, self.end_y), self.width)
+        if not realistic:
+            pygame.draw.line(WIN, self.colour, (self.start_x, self.start_y), (self.end_x, self.end_y), self.width)
+        else:
+            length = dist_to((self.start_x, self.start_y), (self.end_x, self.end_y))
+            x_difference = self.end_x - self.start_x
+            y_difference = self.end_y - self.start_y
+            angle = math.atan2(y_difference, x_difference)
+            self.laser_points.clear()
+            for i in range(int(length / 5) + 1):
+                self.laser_points.append((self.start_x + (i * 5) * math.cos(angle) + (self.amplitude * 10 * math.sin((i*5 / self.wavelength) * 2*math.pi)) * math.sin(angle)
+                                        , self.start_y + (i * 5) * math.sin(angle) + (self.amplitude * 10 * math.sin((i*5 / self.wavelength) * 2*math.pi)) * math.cos(angle)))
+
+            if len(self.laser_points) > 1:
+                pygame.draw.lines(WIN, self.colour, False, self.laser_points, self.width)
 
 
 
@@ -302,9 +353,9 @@ class Interferometer():
         self.wavelength = wavelength
         self.amplitude = amplitude
 
-        self.laser_emitted = Laser((WIDTH/4+25, HEIGHT/2), self.right_mirror.pos, 10, self.amplitude, self.wavelength)
-        self.split_laser = Laser((WIDTH/2, HEIGHT/2), self.top_mirror.pos, 10, self.amplitude, self.wavelength)
-        self.resultant_laser = Laser((WIDTH/2, HEIGHT/2), (WIDTH/2, 2.5*HEIGHT/4-25/2), 10, self.amplitude, self.wavelength)
+        self.laser_emitted = Laser((WIDTH/4+25, HEIGHT/2), self.right_mirror.pos, 4, self.amplitude, self.wavelength)
+        self.split_laser = Laser((WIDTH/2, HEIGHT/2), self.top_mirror.pos, 4, self.amplitude, self.wavelength)
+        self.resultant_laser = Laser((WIDTH/2, HEIGHT/2), (WIDTH/2, 2.5*HEIGHT/4-25/2), 4, self.amplitude, self.wavelength)
 
         self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
 
@@ -361,9 +412,11 @@ class Interferometer():
 
 running = True
 distorting = False
+realistic = False
 
-interferometer = Interferometer(wavelength=700, amplitude=0.5)
+interferometer = Interferometer(wavelength=100, amplitude=0.5)
 graph = Graph((WIDTH/2, HEIGHT-125), WIDTH*3.5/4, 250, (10, 10, 15), x_start=0, x_end=30, y_start=0, y_end=1)
+realistic_toggle = Toggle((WIDTH - 100, 25), 25, 25, "Realistic", (255, 255, 255), realistic)
 
 def quit():
     # closes pygame and quits the application
@@ -407,7 +460,8 @@ while running:
 
     interferometer.draw()
     graph.draw()
-
+    realistic_toggle.draw()
+    
     # Fps text
     fps_text = font.render(f"FPS: {round(get_average_fps(delta_time))}", True, (255, 255, 255))
     WIN.blit(fps_text, (0, 0))
@@ -454,6 +508,8 @@ while running:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse = pygame.mouse.get_pos()
             interferometer.check_drag(mouse)
+
+            realistic = realistic_toggle.check_click(mouse)
 
         elif event.type == pygame.MOUSEMOTION:
             mouse = pygame.mouse.get_pos()
