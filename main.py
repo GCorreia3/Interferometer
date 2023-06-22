@@ -39,6 +39,10 @@ def wavelength_to_colour(wavelength, amplitude):
         R = 1
         G = (700 - wavelength) / (700 - 600)
         B = 0
+    elif wavelength == 1064:
+        R = 1
+        G = 0
+        B = 0
     else:
         R = 1
         G = 1
@@ -144,7 +148,7 @@ class Graph():
         self.text_offset = 5
 
         self.x_axis_title = "Time/s"
-        self.y_axis_title = "Intensity"
+        self.y_axis_title = "Amplitude"
 
         self.x_axis_grid_separation = 1
         self.y_axis_grid_separation = 0.25
@@ -180,7 +184,7 @@ class Graph():
         axis_y_start = font.render(f"{self.y_start}", True, (255, 255, 255))
         WIN.blit(axis_y_start, (self.start_y_coords[0] - axis_y_start.get_width() - self.text_offset, self.start_y_coords[1] - axis_y_start.get_height()/2))
 
-        axis_y_end = font.render(f"{self.y_end}", True, (255, 255, 255))
+        axis_y_end = font.render(f"{round(self.y_end, 2)}", True, (255, 255, 255))
         WIN.blit(axis_y_end, (self.end_y_coords[0] - axis_y_end.get_width() - self.text_offset, self.end_y_coords[1]))
 
         # Draw x-axis Title
@@ -192,18 +196,21 @@ class Graph():
         axis_y_title = pygame.transform.rotate(axis_y_title, 90)
         WIN.blit(axis_y_title, (self.start_y_coords[0] - axis_y_title.get_width()/2 - self.text_offset - 5, self.pos[1] - axis_y_title.get_height()/2))
 
-    def update(self, delta_time, graphing, phase_difference, amplitude):
+    def update(self, delta_time, graphing, y_input):
         if graphing:
             self.is_graphing_colour = (0, 255, 0)
             if self.graph_timer < self.graph_time:
                 self.graph_timer += delta_time
                 self.graph_total_time += delta_time
             else:
-                self.add_point((self.graph_total_time, phase_difference * amplitude * 2))
+                self.add_point((self.graph_total_time, y_input))
                 self.graph_timer = 0
 
             self.x_end = max(30, self.graph_total_time)
             self.x_range = self.x_end - self.x_start
+
+            self.y_end = max(self.y_end, y_input)
+            self.y_range = self.y_end - self.y_start
         else:
             self.is_graphing_colour = (255, 0, 0)
 
@@ -282,10 +289,10 @@ class Mirror(RotatedRectangle):
     def update(self, delta_time, mouse, distorting):
         if distorting:
             if self.drag_axis == 0:
-                self.update_pos((self.pos[0] + math.cos(self.time_distorting) * delta_time * 50, self.pos[1]))
+                self.update_pos((self.pos[0] + math.cos(self.time_distorting) * delta_time * 1e-10, self.pos[1]))
 
             else:
-                self.update_pos((self.pos[0], self.pos[1] + math.cos(self.time_distorting) * delta_time * 50))
+                self.update_pos((self.pos[0], self.pos[1] + math.cos(self.time_distorting) * delta_time * 1e-10))
 
             self.time_distorting += delta_time
         else:
@@ -297,9 +304,9 @@ class Mirror(RotatedRectangle):
                     self.update_pos((self.pos[0], min(self.max_pos, max(self.min_pos, mouse[1] + self.drag_offset[1]))))
             
         if self.drag_axis == 0:
-            self.path_distance = self.pos[0] - WIDTH/2
+            self.path_distance = (self.pos[0] - WIDTH/2) * 8000
         else:
-            self.path_distance = HEIGHT/2 - self.pos[1]
+            self.path_distance = (HEIGHT/2 - self.pos[1]) * 8000
 
 
 
@@ -384,20 +391,25 @@ class Interferometer():
         self.right_mirror.update_pos((7*WIDTH/8, HEIGHT/2))
 
     def update(self, delta_time, mouse, distorting):
+        # Updating mirrors
         self.top_mirror.update(delta_time, mouse, distorting)
         self.right_mirror.update(delta_time, mouse, distorting)
 
-        self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
-
+        # Updating interferometer values
+        self.path_difference = abs(2*self.top_mirror.path_distance - 2*self.right_mirror.path_distance)
         self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2
 
+        # Updating laser path distances
         self.laser_emitted.path_distance = self.right_mirror.path_distance
         self.split_laser.path_distance = self.top_mirror.path_distance
 
         self.laser_emitted.end_x, self.laser_emitted.end_y = self.right_mirror.pos
         self.split_laser.end_x, self.split_laser.end_y = self.top_mirror.pos
+
+        # Updating colour of resultant laser
         self.resultant_laser.update_amplitude(self.phase_difference * self.amplitude * 2)
 
+        # Updating phase of reflected lasers
         right_end_phase = (self.right_mirror.path_distance % self.wavelength) / self.wavelength * 2*math.pi
 
         self.reflected_right_laser.start_x, self.reflected_right_laser.start_y = self.right_mirror.pos
@@ -408,6 +420,7 @@ class Interferometer():
         self.reflected_top_laser.start_x, self.reflected_top_laser.start_y = self.top_mirror.pos
         self.reflected_top_laser.phase = (top_end_phase + math.pi) % 2*math.pi
 
+        # Updating phase of resultant laser
         self.resultant_laser.phase = (self.path_difference % self.wavelength) / self.wavelength * 2*math.pi
     
     def draw(self):
@@ -438,7 +451,7 @@ running = True
 distorting = False
 realistic = False
 
-interferometer = Interferometer(wavelength=400, amplitude=0.5)
+interferometer = Interferometer(wavelength=1064, amplitude=0.5)
 graph = Graph((WIDTH/2, HEIGHT-125), WIDTH*3.5/4, 250, (10, 10, 15), x_start=0, x_end=30, y_start=0, y_end=1)
 realistic_toggle = Toggle((WIDTH - 100, 25), 25, 25, "Realistic", (255, 255, 255), realistic)
 
@@ -543,7 +556,7 @@ while running:
 
     interferometer.update(delta_time, mouse, distorting)
 
-    graph.update(delta_time, graphing, interferometer.phase_difference, interferometer.amplitude)
+    graph.update(delta_time, graphing, interferometer.resultant_laser.amplitude)
 
     pygame.display.update()
 
