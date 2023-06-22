@@ -304,7 +304,7 @@ class Mirror(RotatedRectangle):
 
 
 class Laser():
-    def __init__(self, start_pos, end_pos, width, amplitude, wavelength) -> None:
+    def __init__(self, start_pos, end_pos, width, amplitude, wavelength, phase=0) -> None:
 
         self.start_x, self.start_y = start_pos
         self.end_x, self.end_y = end_pos
@@ -317,6 +317,9 @@ class Laser():
         self.frequency = self.speed / (wavelength / 1_000_000_000)
 
         self.colour = wavelength_to_colour(self.wavelength, self.amplitude)
+
+        self.path_distance = 0
+        self.phase = phase
 
         self.laser_points = []
 
@@ -334,8 +337,8 @@ class Laser():
             angle = math.atan2(y_difference, x_difference)
             self.laser_points.clear()
             for i in range(int(length / 5) + 1):
-                self.laser_points.append((self.start_x + (i * 5) * math.cos(angle) + (self.amplitude * 10 * math.sin((i*5 / self.wavelength) * 2*math.pi)) * math.sin(angle)
-                                        , self.start_y + (i * 5) * math.sin(angle) + (self.amplitude * 10 * math.sin((i*5 / self.wavelength) * 2*math.pi)) * math.cos(angle)))
+                self.laser_points.append((self.start_x + (i * 5) * math.cos(angle) + (self.amplitude * 10 * math.sin((i*5 / self.wavelength) * 2*math.pi + self.phase)) * math.sin(angle)
+                                        , self.start_y + (i * 5) * math.sin(angle) + (self.amplitude * 10 * math.sin((i*5 / self.wavelength) * 2*math.pi + self.phase)) * math.cos(angle)))
 
             if len(self.laser_points) > 1:
                 pygame.draw.lines(WIN, self.colour, False, self.laser_points, self.width)
@@ -356,6 +359,9 @@ class Interferometer():
         self.laser_emitted = Laser((WIDTH/4+25, HEIGHT/2), self.right_mirror.pos, 4, self.amplitude, self.wavelength)
         self.split_laser = Laser((WIDTH/2, HEIGHT/2), self.top_mirror.pos, 4, self.amplitude, self.wavelength)
         self.resultant_laser = Laser((WIDTH/2, HEIGHT/2), (WIDTH/2, 2.5*HEIGHT/4-25/2), 4, self.amplitude, self.wavelength)
+
+        self.reflected_right_laser = Laser(self.right_mirror.pos, (WIDTH/2, HEIGHT/2), 2, self.amplitude, self.wavelength, phase=math.pi)
+        self.reflected_top_laser = Laser(self.top_mirror.pos, (WIDTH/2, HEIGHT/2), 2, self.amplitude, self.wavelength, phase=math.pi)
 
         self.path_difference = abs(self.top_mirror.path_distance - self.right_mirror.path_distance)
 
@@ -385,15 +391,33 @@ class Interferometer():
 
         self.phase_difference = abs(abs(((self.path_difference % self.wavelength) / self.wavelength) - 0.5) - 0.5) * 2
 
+        self.laser_emitted.path_distance = self.right_mirror.path_distance
+        self.split_laser.path_distance = self.top_mirror.path_distance
+
         self.laser_emitted.end_x, self.laser_emitted.end_y = self.right_mirror.pos
         self.split_laser.end_x, self.split_laser.end_y = self.top_mirror.pos
         self.resultant_laser.update_amplitude(self.phase_difference * self.amplitude * 2)
+
+        right_end_phase = (self.right_mirror.path_distance % self.wavelength) / self.wavelength * 2*math.pi
+
+        self.reflected_right_laser.start_x, self.reflected_right_laser.start_y = self.right_mirror.pos
+        self.reflected_right_laser.phase = (right_end_phase + math.pi) % 2*math.pi
+
+        top_end_phase = (self.top_mirror.path_distance % self.wavelength) / self.wavelength * 2*math.pi
+
+        self.reflected_top_laser.start_x, self.reflected_top_laser.start_y = self.top_mirror.pos
+        self.reflected_top_laser.phase = (top_end_phase + math.pi) % 2*math.pi
+
+        self.resultant_laser.phase = (self.path_difference % self.wavelength) / self.wavelength * 2*math.pi
     
     def draw(self):
         # Draw lasers
         self.resultant_laser.draw()
         self.laser_emitted.draw()
         self.split_laser.draw()
+
+        self.reflected_right_laser.draw()
+        self.reflected_top_laser.draw()
 
         # Draw Two Mirrors
         self.top_mirror.draw()
@@ -414,7 +438,7 @@ running = True
 distorting = False
 realistic = False
 
-interferometer = Interferometer(wavelength=100, amplitude=0.5)
+interferometer = Interferometer(wavelength=400, amplitude=0.5)
 graph = Graph((WIDTH/2, HEIGHT-125), WIDTH*3.5/4, 250, (10, 10, 15), x_start=0, x_end=30, y_start=0, y_end=1)
 realistic_toggle = Toggle((WIDTH - 100, 25), 25, 25, "Realistic", (255, 255, 255), realistic)
 
